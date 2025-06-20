@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>إيميل مؤقت مجاني - Temp Email</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: url('https://i.imgur.com/2oYi6BZ.jpg') no-repeat center center fixed;
+            background-size: cover;
+            margin: 0;
+            padding: 0;
+            color: #fff;
+            text-align: center;
+            animation: fadeIn 1s ease-in;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        .navbar {
+            background-color: rgba(0, 71, 171, 0.8);
+            padding: 15px 30px;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+            color: white;
+            font-size: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 15px;
+        }
+        .navbar img {
+            height: 40px;
+            border-radius: 8px;
+        }
+        .container {
+            max-width: 700px;
+            margin: 30px auto;
+            background: rgba(255, 255, 255, 0.1);
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+            transition: transform 0.3s;
+            backdrop-filter: blur(10px);
+        }
+        .container:hover {
+            transform: scale(1.02);
+        }
+        .email-box {
+            font-size: 20px;
+            background-color: rgba(249, 249, 249, 0.2);
+            padding: 15px;
+            border: 1px dashed #fff;
+            margin-bottom: 20px;
+            border-radius: 8px;
+            word-break: break-word;
+            color: #fff;
+        }
+        .btn {
+            background-color: #ff7300;
+            color: white;
+            padding: 10px 30px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+            margin: 5px;
+            transition: background 0.3s;
+        }
+        .btn:hover {
+            background-color: #e66900;
+        }
+        .messages {
+            margin-top: 30px;
+            text-align: left;
+            color: #fff;
+        }
+        .message-item {
+            background: rgba(0,0,0,0.3);
+            padding: 10px;
+            margin-bottom: 10px;
+            border-radius: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div class="navbar">
+        <img src="https://upload.wikimedia.org/wikipedia/commons/a/ab/Logo_TempMail.png" alt="شعار الموقع">
+        <div>مولد بريد مؤقت - Powered by OMAR</div>
+    </div>
+    <div class="container">
+        <h2>عنوان البريد المؤقت الخاص بك:</h2>
+        <div id="email" class="email-box">يتم التحميل...</div>
+        <button class="btn" onclick="copyEmail()">نسخ الإيميل</button>
+        <button class="btn" onclick="changeEmail()">تغيير البريد</button>
+        <button class="btn" onclick="deleteAndCreateEmail()">حذف البريد وإنشاء جديد</button>
+        
+        <div class="messages">
+            <h3>الرسائل الواردة:</h3>
+            <div id="messages-list">يتم التحميل...</div>
+        </div>
+    </div>
+
+    <script>
+        let account = null;
+        let token = null;
+        let intervalID = null;
+        let domain = null;
+
+        async function getDomain() {
+            const res = await fetch('https://api.mail.tm/domains');
+            const data = await res.json();
+            domain = data["hydra:member"][0].domain;
+        }
+
+        async function createAccount() {
+            try {
+                await getDomain();
+                const randomName = Math.random().toString(36).substring(2, 11);
+                const address = randomName + '@' + domain;
+                const password = randomName + 'P@ss';
+                const res = await fetch('https://api.mail.tm/accounts', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({address, password})
+                });
+                if (res.status === 201) {
+                    account = {address, password};
+                    document.getElementById('email').innerText = address;
+                    login();
+                } else {
+                    document.getElementById('email').innerText = 'حدث خطأ في إنشاء البريد';
+                }
+            } catch (err) {
+                document.getElementById('email').innerText = 'حدث خطأ في الاتصال بالخادم';
+            }
+        }
+
+        async function login() {
+            const res = await fetch('https://api.mail.tm/token', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(account)
+            });
+            const data = await res.json();
+            token = data.token;
+            fetchMessages();
+            if (intervalID) clearInterval(intervalID);
+            intervalID = setInterval(fetchMessages, 10000);
+        }
+
+        async function fetchMessages() {
+            if (!token) return;
+            const res = await fetch('https://api.mail.tm/messages', {
+                headers: {'Authorization': 'Bearer ' + token}
+            });
+            const data = await res.json();
+            const messages = data["hydra:member"];
+            const container = document.getElementById('messages-list');
+            container.innerHTML = '';
+            if (messages.length === 0) {
+                container.innerHTML = 'لا توجد رسائل حتى الآن';
+                return;
+            }
+            messages.forEach(msg => {
+                const div = document.createElement('div');
+                div.className = 'message-item';
+                div.innerHTML = `<b>من:</b> ${msg.from.address}<br><b>الموضوع:</b> ${msg.subject}`;
+                container.appendChild(div);
+            });
+        }
+
+        function copyEmail() {
+            const emailText = document.getElementById('email').innerText;
+            navigator.clipboard.writeText(emailText).then(() => alert('تم نسخ البريد!'));
+        }
+
+        function changeEmail() {
+            safelyCreateNewEmail();
+        }
+
+        async function deleteAndCreateEmail() {
+            if (!token) return;
+            await fetch('https://api.mail.tm/me', {
+                method: 'DELETE',
+                headers: {'Authorization': 'Bearer ' + token}
+            });
+            account = null;
+            token = null;
+            document.getElementById('email').innerText = 'جاري إنشاء بريد جديد...';
+            document.getElementById('messages-list').innerHTML = '';
+            if (intervalID) clearInterval(intervalID);
+            setTimeout(() => {
+                safelyCreateNewEmail();
+            }, 1500);
+        }
+
+        function safelyCreateNewEmail() {
+            document.getElementById('email').innerText = 'جاري إنشاء بريد جديد...';
+            document.getElementById('messages-list').innerHTML = '';
+            if (intervalID) clearInterval(intervalID);
+            setTimeout(() => {
+                createAccount();
+            }, 500);
+        }
+
+        createAccount();
+    </script>
+</body>
+</html>
